@@ -177,17 +177,24 @@ struct Node {
   int val;        // kindがND_NUMの場合のみ使う
 };
 
-Node *new_node(NodeKind kind, Node *lhs, Node *rhs) {
+// 新しくノードを作る。左辺右辺には子ノードを付けない
+Node *new_node(NodeKind kind) {
   Node *node = calloc(1, sizeof(Node));
   node->kind = kind;
+  return node;
+}
+
+// 新しくノードを作る。左辺右辺には子ノードを付ける
+Node *new_binary(NodeKind kind, Node *lhs, Node *rhs) {
+  Node *node = new_node(kind);
   node->lhs = lhs;
   node->rhs = rhs;
   return node;
 }
 
+// 数値だけのノードを作る。
 Node *new_node_num(int val) {
-  Node *node = calloc(1, sizeof(Node));
-  node->kind = ND_NUM;
+  Node *node = new_node(ND_NUM);
   node->val = val;
   return node;
 }
@@ -201,15 +208,53 @@ Node *unary();
 Node *primary();
 
 // 式
-// expr = mul ("+" mul | "-" mul)*
-Node *expr() {
+// expr = equality
+Node *expr() { return equality(); }
+
+// 等式
+// equality   = relational ("==" relational | "!=" relational)*
+Node *equality() {
+  Node *node = relational();
+
+  for (;;) {
+    if (consume("=="))
+      node = new_binary(ND_EQ, node, relational());
+    else if (consume("!="))
+      node = new_binary(ND_NE, node, relational());
+    else
+      return node;
+  }
+}
+
+// 不等式
+// relational = add ("<" add | "<=" add | ">" add | ">=" add)*
+Node *relational() {
+  Node *node = add();
+
+  for (;;) {
+    if (consume("<"))
+      node = new_binary(ND_LT, node, add());
+    else if (consume("<="))
+      node = new_binary(ND_LE, node, add());
+    if (consume(">"))
+      node = new_binary(ND_LT, add(), node);  // 左辺右辺を逆にする
+    else if (consume(">="))
+      node = new_binary(ND_LE, add(), node);  // 左辺右辺を逆にする
+    else
+      return node;
+  }
+}
+
+// 和と差
+// add = mul ("+" mul | "-" mul)*
+Node *add() {
   Node *node = mul();
 
   for (;;) {
     if (consume("+"))
-      node = new_node(ND_ADD, node, mul());
+      node = new_binary(ND_ADD, node, mul());
     else if (consume("-"))
-      node = new_node(ND_SUB, node, mul());
+      node = new_binary(ND_SUB, node, mul());
     else
       return node;
   }
@@ -222,9 +267,9 @@ Node *mul() {
 
   for (;;) {
     if (consume("*")) {
-      node = new_node(ND_MUL, node, unary());
+      node = new_binary(ND_MUL, node, unary());
     } else if (consume("/")) {
-      node = new_node(ND_DIV, node, unary());
+      node = new_binary(ND_DIV, node, unary());
     } else {
       return node;
     }
@@ -232,10 +277,10 @@ Node *mul() {
 }
 
 // 符号付きの数
-// unary = ("+" | "-")? primary
+// unary = ("+" | "-")? unary | primary
 Node *unary() {
-  if (consume("+")) return primary();
-  if (consume("-")) return new_node(ND_SUB, new_node_num(0), primary());
+  if (consume("+")) return unary();
+  if (consume("-")) return new_binary(ND_SUB, new_node_num(0), unary());
   return primary();
 }
 
@@ -281,6 +326,26 @@ void gen(Node *node) {
     case ND_DIV:
       printf("  cqo\n");
       printf("  idiv rdi\n");
+      break;
+    case ND_EQ:
+      printf("  cmp rax, rdi\n");
+      printf("  sete al\n");
+      printf("  movzb rax, al\n");
+      break;
+    case ND_NE:
+      printf("  cmp rax, rdi\n");
+      printf("  setne al\n");
+      printf("  movzb rax, al\n");
+      break;
+    case ND_LT:
+      printf("  cmp rax, rdi\n");
+      printf("  setl al\n");
+      printf("  movzb rax, al\n");
+      break;
+    case ND_LE:
+      printf("  cmp rax, rdi\n");
+      printf("  setle al\n");
+      printf("  movzb rax, al\n");
       break;
   }
 
