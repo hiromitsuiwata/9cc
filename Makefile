@@ -2,6 +2,9 @@ CFLAGS=-std=c11 -g -static
 
 9cc: 9cc.c
 
+format: 9cc.c
+	clang-format -i 9cc.c
+
 test: 9cc
 	./test.sh
 

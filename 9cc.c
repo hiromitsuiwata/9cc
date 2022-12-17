@@ -7,9 +7,9 @@
 
 // トークンの種類
 typedef enum {
-  TK_RESERVED, // 記号
-  TK_NUM,      // 整数トークン
-  TK_EOF,      // 入力の終わりを表すトークン
+  TK_RESERVED,  // 記号
+  TK_NUM,       // 整数トークン
+  TK_EOF,       // 入力の終わりを表すトークン
 } TokenKind;
 
 typedef struct Token Token;
@@ -39,8 +39,7 @@ void error(char *fmt, ...) {
 // 次のトークンが期待している記号の時には、トークンを1つ進めて
 // 真を返す。それ以外の場合にはトークンを進めず偽を返す。
 bool consume(char op) {
-  if (token->kind != TK_RESERVED || token->str[0] != op)
-    return false;
+  if (token->kind != TK_RESERVED || token->str[0] != op) return false;
   token = token->next;
   return true;
 }
@@ -56,24 +55,21 @@ void expect(char op) {
 // 次のトークンが数値の場合、トークンを1つ読み進めてその数値を返す。
 // それ以外の場合にはエラーを報告する。
 int expect_number() {
-  if (token->kind != TK_NUM) 
-    error("数ではありません");
+  if (token->kind != TK_NUM) error("数ではありません");
   int val = token->val;
   token = token->next;
   return val;
 }
 
 // EOFか判定する。
-bool at_eof() {
-  return token->kind == TK_EOF;
-}
+bool at_eof() { return token->kind == TK_EOF; }
 
 // 新しいトークンを作成してcurにつなげる
 Token *new_token(TokenKind kind, Token *cur, char *str) {
   // Tokenのバイト数のブロックを1つ割り当てる。ゼロクリアされている。
   Token *tok = calloc(1, sizeof(Token));
   tok->kind = kind;
-  tok->str =str;
+  tok->str = str;
   cur->next = tok;
   return tok;
 }
@@ -111,7 +107,6 @@ Token *tokenize(char *p) {
   return head.next;
 }
 
-
 int main(int argc, char **argv) {
   if (argc != 2) {
     error("引数の個数が正しくありません\n");
@@ -132,7 +127,7 @@ int main(int argc, char **argv) {
 
   // `+ <数>`あるいは`- <数>`というトークンの並びを消費しつつ
   // アセンブリを出力
-  while(!at_eof()) {
+  while (!at_eof()) {
     if (consume('+')) {
       printf("  add rax, %d\n", expect_number());
       continue;
