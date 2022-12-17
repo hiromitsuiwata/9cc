@@ -1,7 +1,7 @@
-#include <stdio.h>
 #include <ctype.h>
 #include <stdarg.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -31,8 +31,6 @@ void error_at(char *loc, char *fmt, ...) {
   fprintf(stderr, "\n");
   exit(1);
 }
-
-
 
 // 次のトークンが期待している記号の時には、トークンを1つ進めて
 // 真を返す。それ以外の場合にはトークンを進めず偽を返す。

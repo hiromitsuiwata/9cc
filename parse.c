@@ -1,9 +1,8 @@
-#include <stdio.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 #include "9cc.h"
-
 
 // 新しくノードを作る。左辺右辺には子ノードを付けない
 Node *new_node(NodeKind kind) {
