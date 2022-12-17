@@ -23,8 +23,8 @@ struct Token {
   Token *next;     // 次の入力トークン
   int val;         // kindがTK_NUMの場合、その数値
   char *str;       // トークン文字列
+  int len;         // トークンの長さ
 };
-
 
 // 入力プログラム
 char *user_input;
@@ -49,7 +49,7 @@ void error_at(char *loc, char *fmt, ...) {
 
   int pos = loc - user_input;
   fprintf(stderr, "%s\n", user_input);
-  fprintf(stderr, "%*s", pos, " "); // pos個の空白を出力
+  fprintf(stderr, "%*s", pos, " ");  // pos個の空白を出力
   fprintf(stderr, "^ ");
   vfprintf(stderr, fmt, ap);
   fprintf(stderr, "\n");
@@ -58,24 +58,27 @@ void error_at(char *loc, char *fmt, ...) {
 
 // 次のトークンが期待している記号の時には、トークンを1つ進めて
 // 真を返す。それ以外の場合にはトークンを進めず偽を返す。
-bool consume(char op) {
-  if (token->kind != TK_RESERVED || token->str[0] != op) return false;
+bool consume(char *op) {
+  if (token->kind != TK_RESERVED || strlen(op) != token->len ||
+      memcmp(token->str, op, token->len))
+    return false;
   token = token->next;
   return true;
 }
 
 // 次のトークンが期待している記号のときには、トークンを1つ読み進める。
 // それ以外の場合にはエラーを報告する。
-void expect(char op) {
-  if (token->kind != TK_RESERVED || token->str[0] != op)
-    error("'%c'ではありません", op);
+void expect(char *op) {
+  if (token->kind != TK_RESERVED || strlen(op) != token->len ||
+      memcmp(token->str, op, token->len))
+    error_at(token->str, "'%s'ではありません", op);
   token = token->next;
 }
 
 // 次のトークンが数値の場合、トークンを1つ読み進めてその数値を返す。
 // それ以外の場合にはエラーを報告する。
 int expect_number() {
-  if (token->kind != TK_NUM) error("数ではありません");
+  if (token->kind != TK_NUM) error_at(token->str, "数ではありません");
   int val = token->val;
   token = token->next;
   return val;
@@ -85,14 +88,25 @@ int expect_number() {
 bool at_eof() { return token->kind == TK_EOF; }
 
 // 新しいトークンを作成してcurにつなげる
-Token *new_token(TokenKind kind, Token *cur, char *str) {
+// strは残りの入力文字列全体
+Token *new_token(TokenKind kind, Token *cur, char *str, int len) {
+  printf("# str: %s\n", str);
+
   // Tokenのバイト数のブロックを1つ割り当てる。ゼロクリアされている。
   Token *tok = calloc(1, sizeof(Token));
+
+  // Tokenに値を設定
   tok->kind = kind;
   tok->str = str;
+  tok->len = len;
+
+  // 今のTokenのnextにつなげる
   cur->next = tok;
+
   return tok;
 }
+
+bool startswith(char *p, char *q) { return memcmp(p, q, strlen(q)) == 0; }
 
 // 入力文字列pをトークナイズしてそれを返す
 Token *tokenize() {
@@ -108,15 +122,23 @@ Token *tokenize() {
       continue;
     }
 
-    // 記号
-    if (strchr("+-*/()", *p)) {
-      cur = new_token(TK_RESERVED, cur, p++);
+    // 2文字の記号
+    if (startswith(p, "==") || startswith(p, "!=") || startswith(p, "<=") ||
+        startswith(p, ">=")) {
+      cur = new_token(TK_RESERVED, cur, p, 2);
+      p += 2;
+      continue;
+    }
+
+    // 1文字の記号
+    if (strchr("+-*/()<>", *p)) {
+      cur = new_token(TK_RESERVED, cur, p++, 1);
       continue;
     }
 
     // 整数
     if (isdigit(*p)) {
-      cur = new_token(TK_NUM, cur, p);
+      cur = new_token(TK_NUM, cur, p, 0);
       cur->val = strtol(p, &p, 10);
       continue;
     }
@@ -124,7 +146,7 @@ Token *tokenize() {
     error_at(p, "トークナイズできません");
   }
 
-  new_token(TK_EOF, cur, p);
+  new_token(TK_EOF, cur, p, 0);
   return head.next;
 }
 
@@ -133,11 +155,16 @@ Token *tokenize() {
 // ########################################
 
 // 抽象構文木のノードの種類
+// >と>=は右辺と左辺を逆にするので定義しない
 typedef enum {
   ND_ADD,  // +
   ND_SUB,  // -
   ND_MUL,  // *
   ND_DIV,  // /
+  ND_EQ,   // ==
+  ND_NE,   // !=
+  ND_LT,   // <
+  ND_LE,   // <=
   ND_NUM,  // 整数
 } NodeKind;
 
@@ -166,6 +193,9 @@ Node *new_node_num(int val) {
 }
 
 Node *expr();
+Node *equality();
+Node *relational();
+Node *add();
 Node *mul();
 Node *unary();
 Node *primary();
@@ -176,9 +206,9 @@ Node *expr() {
   Node *node = mul();
 
   for (;;) {
-    if (consume('+'))
+    if (consume("+"))
       node = new_node(ND_ADD, node, mul());
-    else if (consume('-'))
+    else if (consume("-"))
       node = new_node(ND_SUB, node, mul());
     else
       return node;
@@ -191,9 +221,9 @@ Node *mul() {
   Node *node = unary();
 
   for (;;) {
-    if (consume('*')) {
+    if (consume("*")) {
       node = new_node(ND_MUL, node, unary());
-    } else if (consume('/')) {
+    } else if (consume("/")) {
       node = new_node(ND_DIV, node, unary());
     } else {
       return node;
@@ -204,23 +234,22 @@ Node *mul() {
 // 符号付きの数
 // unary = ("+" | "-")? primary
 Node *unary() {
-  if (consume('+')) return primary(); 
-  if (consume('-')) return new_node(ND_SUB, new_node_num(0), primary());
+  if (consume("+")) return primary();
+  if (consume("-")) return new_node(ND_SUB, new_node_num(0), primary());
   return primary();
 }
 
 // 数または括弧で囲まれた式
 // primary = "(" expr ")" | num
 Node *primary() {
-  if (consume('(')) {
+  if (consume("(")) {
     Node *node = expr();
-    expect(')');
+    expect(")");
     return node;
   }
 
   return new_node_num(expect_number());
 }
-
 
 // ########################################
 // ジェネレータ
@@ -240,19 +269,19 @@ void gen(Node *node) {
   printf("  pop rax\n");
 
   switch (node->kind) {
-  case ND_ADD:
-    printf("  add rax, rdi\n");
-    break;
-  case ND_SUB:
-    printf("  sub rax, rdi\n");
-    break;
-  case ND_MUL:
-    printf("  imul rax, rdi\n");
-    break;
-  case ND_DIV:
-    printf("  cqo\n");
-    printf("  idiv rdi\n");
-    break;
+    case ND_ADD:
+      printf("  add rax, rdi\n");
+      break;
+    case ND_SUB:
+      printf("  sub rax, rdi\n");
+      break;
+    case ND_MUL:
+      printf("  imul rax, rdi\n");
+      break;
+    case ND_DIV:
+      printf("  cqo\n");
+      printf("  idiv rdi\n");
+      break;
   }
 
   printf("  push rax\n");
