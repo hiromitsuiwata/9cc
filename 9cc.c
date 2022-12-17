@@ -167,8 +167,10 @@ Node *new_node_num(int val) {
 
 Node *expr();
 Node *mul();
+Node *unary();
 Node *primary();
 
+// 式
 // expr = mul ("+" mul | "-" mul)*
 Node *expr() {
   Node *node = mul();
@@ -183,21 +185,31 @@ Node *expr() {
   }
 }
 
-// mul = primary ("*" primary | "/" primary)*
+// 積と商
+// mul = unary ("*" unary | "/" unary)*
 Node *mul() {
-  Node *node = primary();
+  Node *node = unary();
 
   for (;;) {
     if (consume('*')) {
-      node = new_node(ND_MUL, node, primary());
+      node = new_node(ND_MUL, node, unary());
     } else if (consume('/')) {
-      node = new_node(ND_DIV, node, primary());
+      node = new_node(ND_DIV, node, unary());
     } else {
       return node;
     }
   }
 }
 
+// 符号付きの数
+// unary = ("+" | "-")? primary
+Node *unary() {
+  if (consume('+')) return primary(); 
+  if (consume('-')) return new_node(ND_SUB, new_node_num(0), primary());
+  return primary();
+}
+
+// 数または括弧で囲まれた式
 // primary = "(" expr ")" | num
 Node *primary() {
   if (consume('(')) {
